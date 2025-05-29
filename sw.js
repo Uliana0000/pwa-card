@@ -1,8 +1,9 @@
-const CACHE_NAME = 'my-visit-card-cache-v1';
+const CACHE_NAME = 'my-visit-card-cache-v3';
+const OFFLINE_URL = '/offline.html';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/offline.html',
+  OFFLINE_URL,
   '/styles.css',
   '/app.js',
   '/images/photo.jpg',
@@ -14,33 +15,28 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        // Кэшируем offline.html в первую очередь
+        return cache.addAll([OFFLINE_URL, ...urlsToCache]);
       })
   );
 });
 
-self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => k !== CACHE_NAME && caches.delete(k)))
-  );
-  self.clients.claim();
-});
-
 self.addEventListener('fetch', event => {
+  // Для навигационных запросов используем стратегию "Network falling back to cache"
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/offline.html'))
+      fetch(event.request)
+        .catch(() => {
+          // Если сеть недоступна, возвращаем offline.html
+          return caches.match(OFFLINE_URL);
+        })
     );
   } else {
+    // Для остальных запросов сначала проверяем кэш
     event.respondWith(
       caches.match(event.request)
-        .then(response => response || fetch(event.request))
-        .catch(() => {
-          if (event.request.headers.get('accept').includes('text/html')) {
-            return caches.match('/offline.html');
-          }
+        .then(response => {
+          return response || fetch(event.request);
         })
     );
   }
